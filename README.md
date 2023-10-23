@@ -1,5 +1,5 @@
 # state-coverage-monitor
-C library to monitor the state coverage of your fuzzer.
+C library to monitor the state coverage of your System Under Test.
 
 ## Overview
 This library intercepts the messages between the SUT and a client (for example a fuzzer) to monitor:
@@ -19,7 +19,7 @@ This library intercepts the messages between the SUT and a client (for example a
     > LD_PRELOAD= ./coverage_library.so [commands to run your fuzzer or your SUT with the library]
 
 ## Input
-To monitor the state coverage of your SUT, the library needs the state mode of the SUT in input (in a .dot file).
+To monitor the state coverage of your SUT, the library needs the state mode of the SUT in input (in a .dot file). If the state model is unknown, you can infer it via active or passive learning.
 
 This is the .dot file describing the LightFTP state model.
 
