@@ -71,6 +71,7 @@ int current_state = 0; // Start at state 0
 long int n_mess = 0;
 int id_socket_request;
 int id_socket_response;
+FILE *errors;
 // -----end variables-----
 
 // -----functions-----
@@ -86,12 +87,23 @@ bool reached_new_state();
 
 //****Core functions****
 
+void writeError(const char *format, ...)
+{
+	errors = fopen("./AFLstar_errors.txt", "a");
+	va_list args;
+	va_start(args, format);
+	vfprintf(errors, format, args);
+	va_end(args);
+	fclose(errors);
+}
+
 Graph *parseDotFile(const char *filename_graph)
 {
+
 	FILE *file = fopen(filename_graph, "r");
 	if (file == NULL)
 	{
-		printf("Error opening file.\n");
+		writeError("Error opening %s\n", filename_graph);
 		return NULL;
 	}
 	char line[256];
@@ -178,7 +190,7 @@ void concatenateAndResize(char **destination, const char *source)
 		*destination = malloc(strlen(source) + 1);
 		if (*destination == NULL)
 		{
-			printf("Memory allocation failed. Exiting.\n");
+			writeError("Memory allocation failed. Exiting.\n");
 			exit(EXIT_FAILURE);
 		}
 		strcpy(*destination, source);
@@ -196,7 +208,7 @@ void concatenateAndResize(char **destination, const char *source)
 			char *temp = (char *)realloc(*destination, new_size);
 			if (temp == NULL)
 			{
-				printf("Memory reallocation failed. Exiting.\n");
+				writeError("Memory allocation failed. Exiting.\n");
 				exit(EXIT_FAILURE);
 			}
 			*destination = temp;
@@ -210,7 +222,7 @@ int handle_request(char *request)
 	debug_file = fopen(filename_debug, "a");
 	if (debug_file == NULL)
 	{
-		fprintf(stderr, "Failed to open the file for writing\n");
+		writeError("Error opening %s\n", filename_debug);
 		return 1;
 	}
 	// here need to read the .dot file and the hit_state for the first time
@@ -220,14 +232,14 @@ int handle_request(char *request)
 		graph = parseDotFile(filename_graph);
 		if (graph == NULL)
 		{
-			printf("Error parsing DOT file.\n");
+			writeError("Error opening %s\n", filename_graph);
 			return 1;
 		}
 
 		FILE *states_file = fopen(filename_states_hit, "r");
 		if (states_file == NULL)
 		{
-			printf("Error parsing %s file.\n", filename_states_hit);
+			writeError("Error opening %s\n", filename_states_hit);
 			return 1;
 		}
 		else
@@ -239,6 +251,7 @@ int handle_request(char *request)
 			if (my_size == 0)
 			{
 				printf("First time initial\n");
+
 				// It's the very first run of the fuzzer,the states vector still empty
 				for (int i = 0; i < graph->num_states; i++)
 					_states[i] = 0;
@@ -263,7 +276,7 @@ int handle_request(char *request)
 		FILE *messages_sent_file = fopen(filename_mess_sent, "r");
 		if (messages_sent_file == NULL)
 		{
-			printf("Error parsing %s file.\n", filename_mess_sent);
+			writeError("Error opening %s\n", filename_mess_sent);
 			return 1;
 		}
 		else
@@ -301,7 +314,7 @@ int handle_request(char *request)
 		trace = (Communication *)realloc(trace, capacity * sizeof(Communication));
 		if (trace == NULL)
 		{
-			printf("Failed to allocate memory\n");
+			writeError("Failed to allocate memory");
 			return 1;
 		}
 	}
@@ -351,14 +364,14 @@ int handle_response(char *response)
 		trace = (Communication *)realloc(trace, capacity * sizeof(Communication));
 		if (trace == NULL)
 		{
-			printf("Failed to allocate memory\n");
+			writeError("Failed to allocate memory");
 			return 1;
 		}
 	}
 	debug_file = fopen(filename_debug, "a");
 	if (debug_file == NULL)
 	{
-		fprintf(stderr, "Failed to open the file for writing\n");
+		writeError("Error opening %s\n", filename_debug);
 		return 1;
 	}
 	keep_message = check_response(response);
@@ -420,7 +433,7 @@ int handle_response(char *response)
 	FILE *states_file = fopen(filename_states_hit, "w");
 	if (states_file == NULL)
 	{
-		printf("Error parsing DOT file.\n");
+		writeError("Error opening %s\n", filename_states_hit);
 		return 1;
 	}
 	else
@@ -443,7 +456,7 @@ int handle_response(char *response)
 	FILE *output_file = fopen(filename_output, "w");
 	if (output_file == NULL)
 	{
-		printf("Error parsing DOT file.\n");
+		writeError("Error opening %s\n", filename_output);
 		return 1;
 	}
 	else
@@ -457,7 +470,7 @@ int handle_response(char *response)
 	FILE *file_mess_sent = fopen(filename_mess_sent, "w");
 	if (file_mess_sent == NULL)
 	{
-		printf("Error parsing DOT file.\n");
+		writeError("Error opening %s\n", filename_mess_sent);
 		return 1;
 	}
 	else
@@ -483,7 +496,7 @@ int scanf(const char *format, ...)
 	if (handle == NULL)
 	{
 		// Handle error if the library fails to load
-		fprintf(stderr, "Failed to load C library: %s\n", dlerror());
+		writeError("Failed to load C library: %s\n", dlerror());
 		return -1; // or handle the error in an appropriate manner
 	}
 	// Get a reference to the original scanf function
@@ -520,7 +533,7 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 		original_recv = (recvFunc)dlsym(RTLD_NEXT, "recv");
 		if (original_recv == NULL)
 		{
-			fprintf(stderr, "Failed to get original recv function: %s\n", dlerror());
+			writeError("Failed to get original recv function: %s\n", dlerror());
 			return -1;
 		}
 	}
@@ -543,7 +556,7 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 		void *handle = dlopen("libc.so.6", RTLD_LAZY);
 		if (handle == NULL)
 		{
-			fprintf(stderr, "Failed to load C library: %s\n", dlerror());
+			writeError("Failed to load C library: %s\n", dlerror());
 			return -1;
 		}
 
@@ -552,7 +565,7 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 
 		if (original_send == NULL)
 		{
-			fprintf(stderr, "Failed to find original send function: %s\n", dlerror());
+			writeError("Failed to find original send function: %s\n", dlerror());
 			dlclose(handle);
 			return -1;
 		}
