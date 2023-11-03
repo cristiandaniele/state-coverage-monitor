@@ -323,6 +323,7 @@ int handle_request(char *request)
 	{
 		sequence_messages = NULL;
 		first_message = true;
+		current_state = 0;
 	}
 
 	else
