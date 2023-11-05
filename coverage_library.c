@@ -228,6 +228,7 @@ int handle_request(char *request)
 	// here need to read the .dot file and the hit_state for the first time
 	if (!file_is_open)
 	{
+		file_is_open = true;
 		// Parse the DOT file
 		graph = parseDotFile(filename_graph);
 		if (graph == NULL)
@@ -244,35 +245,19 @@ int handle_request(char *request)
 		}
 		else
 		{
-			_states = (int *)malloc(graph->num_states * sizeof(int));
-			fseek(states_file, 0, SEEK_END);
-			int my_size = ftell(states_file);
-
-			if (my_size == 0)
+			printf("Loading states-hit file...\n");
+			int i = 0;
+			char buffer[100];
+			size_t arraySize = 0;
+			while (fgets(buffer, sizeof(buffer), states_file) != NULL)
 			{
-				printf("First time initial\n");
-
-				// It's the very first run of the fuzzer,the states vector still empty
-				for (int i = 0; i < graph->num_states; i++)
-					_states[i] = 0;
-			}
-			else
-			{
-				printf("Loading coverage file...\n");
-				if (fseek(states_file, 0, SEEK_SET) != 0)
-				{
-					perror("Error seeking to the beginning of the file");
-					fclose(states_file);
-					return 1;
-				}
-				char line[100];
-				int i = 0;
-				for (int i = 0; i < graph->num_states; i++)
-				{
-					fscanf(states_file, "%d", &_states[i]);
-				}
+				arraySize++;
+				_states = (int *)realloc(_states, arraySize * sizeof(int));
+				_states[i] = atoi(buffer);
+				i++;
 			}
 		}
+
 		FILE *messages_sent_file = fopen(filename_mess_sent, "r");
 		if (messages_sent_file == NULL)
 		{
@@ -281,31 +266,13 @@ int handle_request(char *request)
 		}
 		else
 		{
-			fseek(messages_sent_file, 0, SEEK_END);
-			int my_size = ftell(messages_sent_file);
-
-			if (my_size == 0)
-			{
-				printf("First time initial mess sent\n");
-				// It's the very first run of the fuzzer,the states vector still empty
-				n_mess = 0;
-			}
-			else
-			{
-				printf("Loading messages sent file...\n");
-				if (fseek(messages_sent_file, 0, SEEK_SET) != 0)
-				{
-					perror("Error seeking to the beginning of the file");
-					fclose(messages_sent_file);
-					return 1;
-				}
-				fscanf(messages_sent_file, "%ld", &n_mess);
-			}
+			printf("Loading messages sent file...\n");
+			fscanf(messages_sent_file, "%ld", &n_mess);
 		}
-		file_is_open = true;
 		fclose(states_file);
 		fclose(messages_sent_file);
 	}
+
 	// Check if the vector is full and resize if needed
 	// ATTENTION HERE, size of requests and responses is static (50 char)
 	if (size >= capacity)
