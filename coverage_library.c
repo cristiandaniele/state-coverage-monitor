@@ -45,7 +45,7 @@ typedef struct
 // -----global variables-----
 int length_request = 50;
 int length_response = 50;
-bool ENABLE_DEBUG = true;
+bool ENABLE_DEBUG = false;
 FILE *debug_file;
 char *RESET_COMMAND = "quit";
 Communication *trace = NULL;
@@ -398,20 +398,7 @@ int handle_response(char *response)
 	fclose(debug_file);
 	// first of all I save the hit
 	_states[current_state] += 1;
-	FILE *states_file = fopen(filename_states_hit, "w");
-	if (states_file == NULL)
-	{
-		writeError("Error opening %s\n", filename_states_hit);
-		return 1;
-	}
-	else
-	{
-		for (int i = 0; i < graph->num_states; i++)
-		{
-			fprintf(states_file, "%d\n", _states[i]);
-		}
-	}
-	// I need to update the output file
+
 	int states_covered = 0;
 	for (int i = 0; i < graph->num_states; i++)
 	{
@@ -445,6 +432,21 @@ int handle_response(char *response)
 	{
 		fprintf(file_mess_sent, "%ld\n", n_mess);
 	}
+
+	FILE *states_file = fopen(filename_states_hit, "w");
+	if (states_file == NULL)
+	{
+		writeError("Error opening %s\n", filename_states_hit);
+		return 1;
+	}
+	else
+	{
+		for (int i = 0; i < graph->num_states; i++)
+		{
+			fprintf(states_file, "%d\n", _states[i]);
+		}
+	}
+
 	fclose(output_file);
 	fclose(states_file);
 	fclose(file_mess_sent);
