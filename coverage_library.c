@@ -21,6 +21,8 @@ int (*original_close)(int);
 int (*original_dup2)(int, int);
 
 // -----structures-----
+
+struct flock file_lock;
 typedef struct
 {
 	int source;
@@ -46,16 +48,11 @@ typedef struct
 int length_request = 50;
 int length_response = 50;
 bool ENABLE_DEBUG = false;
-FILE *debug_file;
 char *RESET_COMMAND = "quit";
 Communication *trace = NULL;
 int size = 0;
 int capacity = 0;
-char filename_graph[] = "./graph.dot";
-char filename_debug[] = "./debug.txt";
-char filename_states_hit[] = "./states_hit.txt";
-char filename_mess_sent[] = "./messages_sent.txt";
-char filename_output[] = "./output.txt";
+
 bool file_is_open = false;
 bool first_response = true;
 int *_states;
@@ -69,9 +66,17 @@ typedef ssize_t (*readFunc)(int, void *, size_t);
 bool first_message = true;
 int current_state = 0; // Start at state 0
 long int n_mess = 0;
-int id_socket_request;
-int id_socket_response;
+char filename_graph[] = "./AFLstar_files/graph.dot";
+char filename_debug[] = "./AFLstar_files/debug.txt";
+char filename_states_hit[] = "./AFLstar_files/states_hit.txt";
+char filename_mess_sent[] = "./AFLstar_files/messages_sent.txt";
+char filename_output[] = "./AFLstar_files/output.txt";
 FILE *errors;
+FILE *states_file;
+FILE *messages_sent_file;
+FILE *output_file;
+FILE *debug_file;
+FILE *file_graph;
 // -----end variables-----
 
 // -----functions-----
@@ -89,7 +94,7 @@ bool reached_new_state();
 
 void writeError(const char *format, ...)
 {
-	errors = fopen("./AFLstar_errors.txt", "a");
+	errors = fopen("./AFLstar_files/AFLstar_errors.txt", "a");
 	va_list args;
 	va_start(args, format);
 	vfprintf(errors, format, args);
@@ -100,15 +105,15 @@ void writeError(const char *format, ...)
 Graph *parseDotFile(const char *filename_graph)
 {
 
-	FILE *file = fopen(filename_graph, "r");
-	if (file == NULL)
+	file_graph = fopen(filename_graph, "r");
+	if (file_graph == NULL)
 	{
 		writeError("Error opening %s\n", filename_graph);
 		return NULL;
 	}
 	char line[256];
 	int max_state = -1; // To keep track of the maximum state number encountered
-	while (fgets(line, sizeof(line), file))
+	while (fgets(line, sizeof(line), file_graph))
 	{
 		if (strstr(line, "digraph"))
 		{
@@ -116,7 +121,7 @@ Graph *parseDotFile(const char *filename_graph)
 			graph->num_edges = 0;
 			graph->edges = NULL;
 
-			while (fgets(line, sizeof(line), file))
+			while (fgets(line, sizeof(line), file_graph))
 			{
 				if (strstr(line, "}"))
 					break;
@@ -135,11 +140,11 @@ Graph *parseDotFile(const char *filename_graph)
 			}
 			// I also consider the initial state
 			graph->num_states = max_state + 1;
-			fclose(file);
+			fclose(file_graph);
 			return graph;
 		}
 	}
-	fclose(file);
+	fclose(file_graph);
 	return NULL;
 }
 bool reached_new_state(char *messages)
@@ -237,7 +242,8 @@ int handle_request(char *request)
 			return 1;
 		}
 
-		FILE *states_file = fopen(filename_states_hit, "r");
+		states_file = fopen(filename_states_hit, "r");
+
 		if (states_file == NULL)
 		{
 			writeError("Error opening %s\n", filename_states_hit);
@@ -245,20 +251,27 @@ int handle_request(char *request)
 		}
 		else
 		{
-			printf("Loading states-hit file...\n");
-			int i = 0;
+			// writeError("Loading states-hit file...\n");
 			char buffer[100];
-			size_t arraySize = 0;
-			while (fgets(buffer, sizeof(buffer), states_file) != NULL)
+			_states = (int *)malloc(graph->num_states * sizeof(int));
+			for (int i = 0; i < graph->num_states; i++)
 			{
-				arraySize++;
-				_states = (int *)realloc(_states, arraySize * sizeof(int));
+				fgets(buffer, sizeof(buffer), states_file);
+				// writeError("%s\n", buffer);
 				_states[i] = atoi(buffer);
-				i++;
+			}
+
+			if (_states[0] == 0)
+			{
+				writeError("\nError parsing %s\n", filename_states_hit);
+				for (int j = 0; j < graph->num_states; j++)
+				{
+					_states[j] = 0;
+				}
 			}
 		}
 
-		FILE *messages_sent_file = fopen(filename_mess_sent, "r");
+		messages_sent_file = fopen(filename_mess_sent, "r");
 		if (messages_sent_file == NULL)
 		{
 			writeError("Error opening %s\n", filename_mess_sent);
@@ -267,7 +280,11 @@ int handle_request(char *request)
 		else
 		{
 			printf("Loading messages sent file...\n");
-			fscanf(messages_sent_file, "%ld", &n_mess);
+			if (fscanf(messages_sent_file, "%ld", &n_mess) == 0)
+			{
+				writeError("Error parsing %s\n", filename_mess_sent);
+				n_mess = 0;
+			};
 		}
 		fclose(states_file);
 		fclose(messages_sent_file);
@@ -336,12 +353,7 @@ int handle_response(char *response)
 			return 1;
 		}
 	}
-	debug_file = fopen(filename_debug, "a");
-	if (debug_file == NULL)
-	{
-		writeError("Error opening %s\n", filename_debug);
-		return 1;
-	}
+
 	keep_message = check_response(response);
 	if (keep_message == true)
 	{
@@ -383,8 +395,9 @@ int handle_response(char *response)
 			{
 				strcat(trace[size].request, "\n");
 			}
+
 			strcat(sequence_messages, trace[size].request);
-			// I can finally controll the state model
+			// I can finally control the state model
 			reached_new_state(sequence_messages);
 		}
 	}
@@ -392,10 +405,19 @@ int handle_response(char *response)
 	strncpy(last_response, trace[size].response, length_response);
 
 	if (ENABLE_DEBUG)
-		fprintf(debug_file, "%d:Request(id:%d): %s\n%d:Response(id:%d): %s\nTrace:\n---\n%s\n---\n\n", size, id_socket_request, trace[size].request, size, id_socket_response, trace[size].response, sequence_messages);
+	{
+		debug_file = fopen(filename_debug, "a");
+		if (debug_file == NULL)
+		{
+			writeError("Error opening %s\n", filename_debug);
+			return 1;
+		}
+		fprintf(debug_file, "%d:Request: %s\n%d:Response: %s\nTrace:\n---\n%s\n---\n\n", size, trace[size].request, size, trace[size].response, sequence_messages);
+		fclose(debug_file);
+	}
 
 	size++;
-	fclose(debug_file);
+
 	// first of all I save the hit
 	_states[current_state] += 1;
 
@@ -408,7 +430,7 @@ int handle_response(char *response)
 		}
 	}
 	double perc = (double)(states_covered) / graph->num_states * 100;
-	FILE *output_file = fopen(filename_output, "w");
+	output_file = fopen(filename_output, "w");
 	if (output_file == NULL)
 	{
 		writeError("Error opening %s\n", filename_output);
@@ -422,18 +444,7 @@ int handle_response(char *response)
 			fprintf(output_file, "State: %d - Hit: %d\n", i, _states[i]);
 		}
 	}
-	FILE *file_mess_sent = fopen(filename_mess_sent, "w");
-	if (file_mess_sent == NULL)
-	{
-		writeError("Error opening %s\n", filename_mess_sent);
-		return 1;
-	}
-	else
-	{
-		fprintf(file_mess_sent, "%ld\n", n_mess);
-	}
-
-	FILE *states_file = fopen(filename_states_hit, "w");
+	states_file = fopen(filename_states_hit, "w");
 	if (states_file == NULL)
 	{
 		writeError("Error opening %s\n", filename_states_hit);
@@ -441,15 +452,30 @@ int handle_response(char *response)
 	}
 	else
 	{
+		// writeError("Writing start\n");
 		for (int i = 0; i < graph->num_states; i++)
 		{
+			// writeError("%d\n", _states[i]);
 			fprintf(states_file, "%d\n", _states[i]);
 		}
+		// writeError("Writing end\n");
 	}
 
-	fclose(output_file);
+	messages_sent_file = fopen(filename_mess_sent, "w");
+	if (messages_sent_file == NULL)
+	{
+		writeError("Error opening %s\n", filename_mess_sent);
+		return 1;
+	}
+	else
+	{
+		fprintf(messages_sent_file, "%ld\n", n_mess);
+	}
+
 	fclose(states_file);
-	fclose(file_mess_sent);
+	fclose(messages_sent_file);
+	fclose(output_file);
+
 	return 0;
 }
 //****End core functions****
@@ -485,7 +511,6 @@ int scanf(const char *format, ...)
 	va_start(args, format);
 	int result = vsscanf(buffer, format, args);
 	va_end(args);
-
 	handle_request(buffer);
 	// Close the library handle
 	dlclose(handle);
@@ -493,27 +518,26 @@ int scanf(const char *format, ...)
 	return result;
 }
 
-typedef ssize_t (*recvFunc)(int sockfd, void *buf, size_t len, int flags);
+// typedef ssize_t (*recvFunc)(int sockfd, void *buf, size_t len, int flags);
 
-ssize_t recv(int sockfd, void *buf, size_t len, int flags)
-{
-	static recvFunc original_recv = NULL;
-	if (original_recv == NULL)
-	{
-		original_recv = (recvFunc)dlsym(RTLD_NEXT, "recv");
-		if (original_recv == NULL)
-		{
-			writeError("Failed to get original recv function: %s\n", dlerror());
-			return -1;
-		}
-	}
+// ssize_t recv(int sockfd, void *buf, size_t len, int flags)
+// {
+// 	static recvFunc original_recv = NULL;
+// 	if (original_recv == NULL)
+// 	{
+// 		original_recv = (recvFunc)dlsym(RTLD_NEXT, "recv");
+// 		if (original_recv == NULL)
+// 		{
+// 			writeError("Failed to get original recv function: %s\n", dlerror());
+// 			return -1;
+// 		}
+// 	}
 
-	ssize_t bytes_received = original_recv(sockfd, buf, len, flags);
-	// Handling the requests
-	id_socket_request = sockfd;
-	handle_request(buf);
-	return bytes_received;
-}
+// 	ssize_t bytes_received = original_recv(sockfd, buf, len, flags);
+// 	// Handling the requests
+// 	handle_request(buf);
+// 	return bytes_received;
+// }
 
 typedef char *(*orig_gets_t)(char *);
 
@@ -552,7 +576,6 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 		char *buffer = malloc(result + 1); // Allocate enough space for null-terminator
 		strncpy(buffer, buf, result);
 		buffer[result] = '\0'; // Add null-terminator
-		id_socket_response = sockfd;
 		handle_response(buffer);
 		free(buffer);
 	}
