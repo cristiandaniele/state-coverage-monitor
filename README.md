@@ -23,27 +23,36 @@ To monitor the state coverage of your SUT, the library needs the state mode of t
 
 This is the .dot file describing the LightFTP state model.
 
-        digraph g {
-            0 -> 1 [label="user ubuntu"]
-            0 -> 0 [label="other"]
-            1 -> 1 [label="other"]
-            1 -> 2 [label="pass ubuntu"]
-            1 -> 0 [label="quit"]
-            2 -> 1 [label="user ubuntu"]
-            2 -> 2 [label="other"]
-            2 -> 3 [label="list"]
-            2 -> 4 [label="pasv"]
-            2 -> 0 [label="quit"]
-            2 -> 3 [label="pwd"]
-            3 -> 1 [label="user ubuntu"]
-            3 -> 3 [label="other"]
-            3 -> 4 [label="pasv"]
-            3 -> 0 [label="quit"]
-            4 -> 1 [label="user ubuntu"]
-            4 -> 4 [label="other"]
-            4 -> 3 [label="list"]
-            4 -> 0 [label="quit"]
-        }
+        digraph  {
+            0 -> 1  [label="user ubuntu"];
+            0 -> 0  [label="others"];
+            1 -> 2  [label="pass ubuntu"];
+            1 -> 0  [label="user xxx"];
+            1 -> 0  [label="quit"];
+            1 -> 1  [label="others"];
+            2 -> 1  [label="user ubuntu"];
+            2 -> 0  [label="user xxx"];
+            2 -> 0  [label="quit"];
+            2 -> 3  [label="pwd"];
+            2 -> 3  [label="list"];
+            2 -> 3  [label="mlsd"];
+            2 -> 4  [label="epsv"];
+            2 -> 4  [label="pasv"];
+            2 -> 2  [label="other"];
+            3 -> 1  [label="user ubuntu"];
+            3 -> 0  [label="user xxx"];
+            3 -> 0  [label="quit"];
+            3 -> 4  [label="epsv"];
+            3 -> 4  [label="pasv"];
+            3 -> 3  [label="other"];
+            4 -> 1  [label="user ubuntu"];
+            4 -> 0  [label="user xxx"];
+            4 -> 0  [label="quit"];
+            4 -> 3  [label="list"];
+            4 -> 3  [label="abor"];
+            4 -> 3  [label="mlsd"];
+            4 -> 4  [label="other"];
+            }
 
 The correspondent state model is:
 ![LightFTP state model](./state_model.png "LightFTP state model")
@@ -62,3 +71,6 @@ Once you finish your testing, the file *output.txt* will contain all the informa
 
 This is a beta version of the library used for academic purposes. Thus, this version only overrides the functions **scanf**, **recv** and **send**.
 
+## TODO
+
+Locks on all the files to avoid problems.
